@@ -28,7 +28,8 @@ class VideoStream:
         self.stream.release()
 
 def main():
-    MODEL_PATH = "models/best_full_integer_quant_edgetpu.tflite"
+    #MODEL_PATH = "models/best_full_integer_quant_edgetpu.tflite"
+    MODEL_PATH = "models/yolov8n_full_integer_quant_edgetpu.tflite"
     print(f"[INFO] Загрузка модели {MODEL_PATH}...")
     
     # Загружаем модель. Ultralytics сама найдет Edge TPU
@@ -49,21 +50,29 @@ def main():
         if frame is None:
             continue
 
-        # Инференс модели (conf=0.4 - порог уверенности)
-        results = model.predict(source=frame, conf=0.4, verbose=False)
+        # Замеряем только время работы нейросети (Coral)
+        start_inf = time.time()
+        #results = model.predict(source=frame, conf=0.4, verbose=False)
+        results = model.predict(source=frame, conf=0.4, classes=[0], verbose=False)
+        inf_time = time.time() - start_inf
         
-        # Отрисовка рамок
+        coral_fps = 1 / inf_time if inf_time > 0 else 0
+
+        # Отрисовка рамок (работает на CPU Raspberry)
         annotated_frame = results[0].plot()
 
-        # Подсчет FPS
+        # Общий FPS системы (с учетом отрисовки)
         curr_time = time.time()
-        fps = 1 / (curr_time - prev_time)
+        sys_fps = 1 / (curr_time - prev_time)
         prev_time = curr_time
-        fps_avg = 0.9 * fps_avg + 0.1 * fps # Сглаживание FPS
+        
+        fps_avg = 0.9 * fps_avg + 0.1 * sys_fps
 
-        # Вывод FPS на экран
-        cv2.putText(annotated_frame, f"FPS: {fps_avg:.1f}", (10, 30), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        # Выводим обе цифры
+        cv2.putText(annotated_frame, f"System FPS: {fps_avg:.1f}", (10, 30), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+        cv2.putText(annotated_frame, f"Coral FPS: {coral_fps:.1f}", (10, 60), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
 
         cv2.imshow("Raspberry Pi 5 + Google Coral", annotated_frame)
 
